@@ -1,73 +1,114 @@
 <template>
-  <div v-if="show" class="fixed inset-0 bg-black/50 flex justify-center items-center">
-    <div class="bg-white p-6 rounded w-[400px]">
-      <h2 class="text-lg font-bold mb-4">{{ task?.id ? 'Edit' : 'New' }} Task</h2>
-      <form @submit.prevent="handleSubmit">
-        <input v-model="form.title" placeholder="Title" class="input mb-2" required />
-        <textarea v-model="form.description" placeholder="Description" class="input mb-2" />
-        <input type="date" v-model="form.dueDate" class="input mb-2" required />
-        <select v-model="form.priority" class="input mb-2">
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-        <input v-model="tagInput" placeholder="Add tag" class="input mb-2" @keyup.enter.prevent="addTag" />
-        <div class="flex gap-1 mb-2">
-          <span v-for="(tag, i) in form.tags" :key="i" class="bg-blue-200 px-2 py-0.5 rounded">
-            {{ tag }}
-            <button @click.prevent="form.tags.splice(i, 1)">x</button>
-          </span>
-        </div>
-        <div class="flex justify-end gap-2">
-          <button type="button" @click="emit('close')">Cancel</button>
-          <button type="submit">{{ task?.id ? 'Update' : 'Add' }}</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <q-dialog :model-value="show" @update:model-value="$emit('close')" persistent>
+    <q-card style="width: 500px; max-width: 90vw;">
+      <q-form @submit.prevent="handleSubmit">
+        <q-card-section>
+          <div class="text-h6">{{ form.id ? 'Edit Task' : 'New Task' }}</div>
+        </q-card-section>
+
+        <q-card-section class="q-pt-none">
+          <q-input
+            v-model="form.title"
+            label="Title"
+            filled
+            :rules="[val => !!val || 'Title is required']"
+            lazy-rules
+          />
+          <q-input
+            v-model="form.description"
+            label="Description"
+            type="textarea"
+            filled
+            class="q-mt-md"
+          />
+          <q-input
+            v-model="form.dueDate"
+            label="Due Date"
+            type="date"
+            filled
+            class="q-mt-md"
+            :rules="[val => !!val || 'Due date is required']"
+            lazy-rules
+          />
+          <q-select
+            v-model="form.priority"
+            :options="['low', 'medium', 'high']"
+            label="Priority"
+            filled
+            class="q-mt-md"
+          />
+        </q-card-section>
+
+        <q-card-actions align="right" class="q-pa-md">
+          <q-btn flat label="Cancel" color="primary" @click="$emit('close')" />
+          <q-btn
+            type="submit"
+            :label="form.id ? 'Update' : 'Add'"
+            color="primary"
+          />
+        </q-card-actions>
+      </q-form>
+    </q-card>
+  </q-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { Task } from '@/types/Task'
-import { v4 as uuidv4 } from 'uuid'
+import { ref, watch } from 'vue';
+import { useQuasar } from 'quasar';
+import { useTaskStore } from '@/stores/task';
+import type { Task, Priority } from '@/types/Task';;
 
-const props = defineProps<{ task?: Task, show: boolean }>()
-const emit = defineEmits(['save', 'close'])
+const props = defineProps<{
+  task?: Task
+  show: boolean
+}>()
+const emit = defineEmits(['close']);
 
-const form = ref<Task>({
-  id: '',
+const $q = useQuasar();
+const taskStore = useTaskStore();
+
+// Formani boshlang'ich holati
+const getDefaultForm = (): Omit<Task, 'id' | 'userId'> & { id?: string } => ({
   title: '',
   description: '',
   dueDate: '',
   priority: 'medium',
   tags: [],
   status: 'todo',
-  userId: 'user123'
-})
+});
 
-watch(() => props.task, () => {
-  if (props.task) form.value = { ...props.task }
-  else form.value = { ...form.value, id: '', title: '', description: '', tags: [], status: 'todo' }
-}, { immediate: true })
+const form = ref(getDefaultForm());
 
-const tagInput = ref('')
-const addTag = () => {
-  if (tagInput.value) {
-    form.value.tags.push(tagInput.value.trim())
-    tagInput.value = ''
+// Prop o'zgarganda formani to'ldirish
+watch(() => props.task, (newTask) => {
+  if (newTask) {
+    form.value = { ...newTask };
+  } else {
+    form.value = getDefaultForm();
   }
-}
+}, { immediate: true, deep: true });
 
+// Formani yuborish
 const handleSubmit = () => {
-  if (!form.value.id) form.value.id = uuidv4()
-  emit('save', { ...form.value })
-  emit('close')
-}
+  if (form.value.id) {
+    // Tahrirlash
+    taskStore.updateTask(form.value as Task);
+    $q.notify({
+        color: 'green-4',
+        textColor: 'white',
+        icon: 'cloud_done',
+        message: 'Task updated successfully'
+    });
+  } else {
+    // Qo'shish
+    const { ...taskData } = form.value;
+    taskStore.addTask(taskData);
+    $q.notify({
+        color: 'positive',
+        message: 'Task added successfully',
+        icon: 'check'
+    });
+  }
+  emit('close');
+};
 </script>
-
-<style scoped>
-.input {
-  @apply w-full p-2 border rounded;
-}
-</style>
